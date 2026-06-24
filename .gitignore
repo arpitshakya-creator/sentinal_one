@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+.env
+.env.local
+*.log
+.pgdata
+data/pgdata
+_designdoc.txt
+.DS_Store
