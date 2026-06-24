@@ -1,0 +1,21 @@
+{
+  "name": "supplychain-sentinel-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SupplyChain Sentinel AI backend — Express API for real-time supply-chain cyber risk intelligence.",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "seed": "node scripts/seed.js",
+    "ingest": "node scripts/ingest.js",
+    "ai-test": "node scripts/ai-test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.31.0",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "openai": "^6.44.0"
+  }
+}
