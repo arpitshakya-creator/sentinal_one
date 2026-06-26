@@ -49,11 +49,13 @@ export default function Mitigation() {
     }
   };
 
+  const selected = suppliers.find((s) => s.supplier_id === supplierId);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Mitigation Playbook</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">Mitigation Playbook</h1>
           <p className="text-sm text-slate-500">
             Prioritized 4-tier response plan and ranked alternate suppliers
           </p>
@@ -87,8 +89,8 @@ export default function Mitigation() {
 
       {plan?.ai_summary && (
         <div className="card border-accent/20 bg-accent/5">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-accent">Claude AI briefing</div>
-          <p className="text-sm text-slate-200">{plan.ai_summary}</p>
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-accent">AI briefing</div>
+          <p className="text-sm text-slate-700">{plan.ai_summary}</p>
         </div>
       )}
 
@@ -103,17 +105,35 @@ export default function Mitigation() {
                 <div key={a.category} className={`card ${meta.color}`}>
                   <div className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} />
-                    <h3 className="font-semibold text-white">{meta.title}</h3>
+                    <h3 className="font-semibold text-slate-900">{meta.title}</h3>
                   </div>
                   <div className="text-xs text-slate-500">{a.window}</div>
                   <ul className="mt-3 space-y-2">
                     {a.actions.map((act, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-slate-300">
+                      <li key={i} className="flex gap-2 text-sm text-slate-600">
                         <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-slate-600" />
                         {act}
                       </li>
                     ))}
                   </ul>
+                  {a.controls?.length > 0 && (
+                    <div className="mt-3 border-t border-line pt-2">
+                      <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">
+                        Mapped controls
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {a.controls.map((ctrl) => (
+                          <span
+                            key={ctrl.id}
+                            className="tag bg-bg-elevated font-mono text-[10px] text-slate-600"
+                            title={`${ctrl.framework} — ${ctrl.title}`}
+                          >
+                            {ctrl.id}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -133,10 +153,66 @@ export default function Mitigation() {
               ))}
             </div>
           </div>
+
+          {plan.compliance && (
+            <div className="card">
+              <SectionTitle
+                title="Compliance Posture"
+                subtitle="Control gaps assessed against ISO/IEC 27002:2022 and NIST SP 800-53 Rev.5"
+              />
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <StatusPill status="met" count={plan.compliance.summary.met} />
+                <StatusPill status="partial" count={plan.compliance.summary.partial} />
+                <StatusPill status="gap" count={plan.compliance.summary.gap} />
+                {selected?.iso27005 && (
+                  <span className="ml-auto text-xs text-slate-500">
+                    ISO/IEC 27005 risk rating:{" "}
+                    <span className="font-semibold text-slate-700">{selected.iso27005.risk_rating}</span>{" "}
+                    (L: {selected.iso27005.likelihood.level} × C: {selected.iso27005.consequence.level})
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                {plan.compliance.findings.map((f, i) => (
+                  <div key={i} className="flex items-start gap-3 rounded-lg border border-line bg-bg-soft p-3">
+                    <StatusDot status={f.status} />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs text-accent">{f.control}</span>
+                        <span className="text-sm text-slate-700">{f.title}</span>
+                        <span className="text-[10px] text-slate-500">{f.framework}</span>
+                      </div>
+                      <p className="text-xs text-slate-500">{f.rationale}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
   );
+}
+
+const STATUS_META = {
+  met: { label: "Met", color: "#22c55e" },
+  partial: { label: "Partial", color: "#ffb600" },
+  gap: { label: "Gap", color: "#e0301e" },
+};
+
+function StatusPill({ status, count }) {
+  const m = STATUS_META[status];
+  return (
+    <span className="tag" style={{ background: `${m.color}1f`, color: m.color }}>
+      {count} {m.label}
+    </span>
+  );
+}
+
+function StatusDot({ status }) {
+  const m = STATUS_META[status];
+  return <span className="mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ background: m.color }} title={m.label} />;
 }
 
 function AltRow({ alt, top }) {
@@ -148,7 +224,7 @@ function AltRow({ alt, top }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-slate-100">{alt.name}</span>
+          <span className="font-medium text-slate-900">{alt.name}</span>
           <span className="text-xs text-slate-500">{alt.country}</span>
           {top && <span className="tag bg-risk-low/15 text-risk-low">Best match</span>}
         </div>
@@ -157,7 +233,7 @@ function AltRow({ alt, top }) {
           <span className="text-xs text-slate-500">match</span>
         </div>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400 sm:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">
         <Factor label="Component" v={alt.component_category_match} />
         <Factor label="Proximity" v={alt.geographic_proximity} />
         <Factor label="Quality" v={alt.quality_rating} />
@@ -165,14 +241,14 @@ function AltRow({ alt, top }) {
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         <span className="text-slate-500">
-          Lead time: <span className="text-slate-300">{alt.estimated_lead_time_days} days</span>
+          Lead time: <span className="text-slate-600">{alt.estimated_lead_time_days} days</span>
         </span>
         <span className="text-slate-500">
-          Onboarding: <span className="text-slate-300">{alt.onboarding_effort}</span>
+          Onboarding: <span className="text-slate-600">{alt.onboarding_effort}</span>
         </span>
         {alt.covers_components.length > 0 && (
           <span className="text-slate-500">
-            Covers: <span className="text-slate-300">{alt.covers_components.join(", ")}</span>
+            Covers: <span className="text-slate-600">{alt.covers_components.join(", ")}</span>
           </span>
         )}
       </div>
@@ -188,7 +264,7 @@ function Factor({ label, v }) {
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-bg-elevated">
           <div className="h-full bg-accent" style={{ width: `${v}%` }} />
         </div>
-        <span className="text-slate-400">{v}%</span>
+        <span className="text-slate-500">{v}%</span>
       </div>
     </div>
   );
@@ -198,7 +274,7 @@ function Metric({ label, value, accent }) {
   return (
     <div className="card">
       <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold ${accent ? "text-risk-critical" : "text-white"}`}>
+      <div className={`mt-1 text-2xl font-semibold ${accent ? "text-risk-critical" : "text-slate-900"}`}>
         {value}
       </div>
     </div>

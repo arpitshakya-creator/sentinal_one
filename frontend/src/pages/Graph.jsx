@@ -72,22 +72,22 @@ export default function Graph() {
       const isSupplier = n.type === "Supplier";
       const score = Number(n.props.risk_score ?? n.props.base_risk ?? 0);
       const baseColor = isSupplier ? BAND_HEX[bandFromScore(score)] : TYPE_COLOR[n.type];
-      const color = inBlast ? "#ef4444" : baseColor;
+      const color = inBlast ? "#dc2626" : baseColor;
       const label = isSupplier ? `${n.label}\n(${score})` : n.label;
       return {
         id: n.id,
         position: positions.get(n.id) ?? { x: 0, y: 0 },
         data: { label },
         style: {
-          background: inBlast ? "rgba(239,68,68,0.18)" : "#121a28",
-          color: "#e2e8f0",
+          background: inBlast ? "rgba(220,38,38,0.10)" : "#ffffff",
+          color: "#0f172a",
           border: `2px solid ${color}`,
           borderRadius: 10,
           fontSize: 11,
           width: 170,
           padding: 8,
           whiteSpace: "pre-line",
-          boxShadow: inBlast ? "0 0 18px rgba(239,68,68,0.55)" : "none",
+          boxShadow: inBlast ? "0 0 16px rgba(220,38,38,0.35)" : "0 1px 2px rgba(15,23,42,0.06)",
         },
         className: inBlast ? "animate-pulseRisk" : undefined,
       };
@@ -102,10 +102,10 @@ export default function Graph() {
         source: e.source,
         target: e.target,
         animated: active,
-        style: { stroke: active ? "#ef4444" : "#27364d", strokeWidth: active ? 2.5 : 1 },
+        style: { stroke: active ? "#dc2626" : "#cbd5e1", strokeWidth: active ? 2.5 : 1 },
         label: e.type,
         labelStyle: { fill: "#64748b", fontSize: 9 },
-        labelBgStyle: { fill: "#0a0e14" },
+        labelBgStyle: { fill: "#ffffff" },
       };
     });
   }, [rawEdges, blast]);
@@ -149,7 +149,7 @@ export default function Graph() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Supply Chain Graph</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">Supply Chain Graph</h1>
           <p className="text-sm text-slate-500">
             Dependency graph · click a node to inspect · simulate a breach to render the blast radius
           </p>
@@ -187,14 +187,14 @@ export default function Graph() {
             proOptions={{ hideAttribution: true }}
             minZoom={0.2}
           >
-            <Background variant={BackgroundVariant.Dots} gap={20} color="#1e2a3d" />
-            <Controls className="!bg-bg-elevated !border-line" />
+            <Background variant={BackgroundVariant.Dots} gap={20} color="#cbd5e1" />
+            <Controls className="!bg-bg-card !border-line" />
             <MiniMap
               pannable
               zoomable
-              nodeColor={(n) => (blast.has(n.id) ? "#ef4444" : "#334155")}
-              maskColor="rgba(10,14,20,0.7)"
-              style={{ background: "#0f1622" }}
+              nodeColor={(n) => (blast.has(n.id) ? "#dc2626" : "#cbd5e1")}
+              maskColor="rgba(241,244,249,0.6)"
+              style={{ background: "#f8fafc" }}
             />
           </ReactFlow>
         </div>
@@ -217,12 +217,12 @@ function LegendCard() {
         {Object.keys(TYPE_COLOR).map((t) => (
           <div key={t} className="flex items-center gap-2">
             <span className="h-3 w-3 rounded" style={{ background: TYPE_COLOR[t] }} />
-            <span className="text-slate-400">{t}</span>
+            <span className="text-slate-500">{t}</span>
           </div>
         ))}
         <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
           <span className="h-3 w-3 rounded bg-risk-critical" />
-          <span className="text-slate-400">Blast radius (breached)</span>
+          <span className="text-slate-500">Blast radius (breached)</span>
         </div>
       </div>
     </div>
@@ -234,7 +234,7 @@ function InspectCard({ node, onSimulate, busy }) {
   return (
     <div className="card animate-slideUp">
       <div className="text-xs uppercase tracking-wider text-slate-500">{node.type}</div>
-      <div className="text-lg font-semibold text-white">{node.label}</div>
+      <div className="text-lg font-semibold text-slate-900">{node.label}</div>
       <div className="mt-3 space-y-1 text-sm">
         {node.type === "Supplier" && (
           <>
@@ -275,7 +275,7 @@ function BlastCard({ impact }) {
         <Metric k="Revenue at risk" v={impact.revenue_at_risk_usd} accent />
         <Metric k="Confidence" v={impact.confidence} />
       </div>
-      <div className="mt-3 text-xs text-slate-400">
+      <div className="mt-3 text-xs text-slate-500">
         {impact.affected_plant_names.join(", ")}
       </div>
     </div>
@@ -286,7 +286,7 @@ function Row({ k, v }) {
   return (
     <div className="flex justify-between gap-3">
       <span className="text-slate-500">{k}</span>
-      <span className="text-right text-slate-200">{v}</span>
+      <span className="text-right text-slate-700">{v}</span>
     </div>
   );
 }
@@ -295,7 +295,7 @@ function Metric({ k, v, accent }) {
   return (
     <div className="rounded-lg border border-line bg-bg-soft p-2">
       <div className="text-[10px] uppercase tracking-wide text-slate-500">{k}</div>
-      <div className={`text-base font-semibold ${accent ? "text-risk-critical" : "text-white"}`}>{v}</div>
+      <div className={`text-base font-semibold ${accent ? "text-risk-critical" : "text-slate-900"}`}>{v}</div>
     </div>
   );
 }

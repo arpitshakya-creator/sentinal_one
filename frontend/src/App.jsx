@@ -7,9 +7,9 @@ import Mitigation from "./pages/Mitigation.jsx";
 
 export default function App() {
   return (
-    <>
+    <div className="flex min-h-screen flex-col">
       <NavBar />
-      <main className="mx-auto max-w-[1500px] px-5 py-6">
+      <main className="mx-auto w-full max-w-[1500px] flex-1 px-5 py-6">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/graph" element={<Graph />} />
@@ -17,6 +17,6 @@ export default function App() {
           <Route path="/mitigation" element={<Mitigation />} />
         </Routes>
       </main>
-    </>
+    </div>
   );
 }

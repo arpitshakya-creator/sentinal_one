@@ -8,8 +8,8 @@ export function bandFromScore(score) {
 
 export const BAND_HEX = {
   low: "#22c55e",
-  medium: "#f59e0b",
-  critical: "#ef4444",
+  medium: "#ffb600",
+  critical: "#e0301e",
 };
 
 export const BAND_LABEL = {

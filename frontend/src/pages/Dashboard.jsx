@@ -16,18 +16,21 @@ export default function Dashboard() {
   const [suppliers, setSuppliers] = useState([]);
   const [cves, setCves] = useState([]);
   const [threats, setThreats] = useState([]);
+  const [standards, setStandards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ingesting, setIngesting] = useState(false);
 
   const load = useCallback(async () => {
-    const [s, c, t] = await Promise.all([
+    const [s, c, t, st] = await Promise.all([
       fetch("/api/suppliers").then((r) => r.json()),
       fetch("/api/cves").then((r) => r.json()),
       fetch("/api/threats").then((r) => r.json()),
+      fetch("/api/standards").then((r) => r.json()),
     ]);
     setSuppliers(s.suppliers ?? []);
     setCves(c.cves ?? []);
     setThreats(t.threats ?? []);
+    setStandards(st.standards ?? []);
     setLoading(false);
   }, []);
 
@@ -59,9 +62,12 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Threat Dashboard</h1>
+      <div className="flex items-end justify-between gap-4">
+        <div className="border-l-4 border-pwc-orange pl-4">
+          <div className="mb-1 flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text-slate-900">Threat Dashboard</h1>
+            <span className="tag bg-accent/15 text-accent">Powered by Gen AI</span>
+          </div>
           <p className="text-sm text-slate-500">
             Helios Motorworks · live supplier cyber-risk posture from NVD &amp; CISA KEV
           </p>
@@ -113,12 +119,12 @@ export default function Dashboard() {
                   {suppliers.map((s) => (
                     <tr key={s.supplier_id} className="border-t border-line hover:bg-bg-soft/50">
                       <td className="px-3 py-2.5">
-                        <div className="font-medium text-slate-100">{s.name}</div>
+                        <div className="font-medium text-slate-900">{s.name}</div>
                         <div className="text-xs text-slate-500">{s.country}</div>
                       </td>
-                      <td className="px-3 py-2.5 text-slate-400">T{s.tier}</td>
+                      <td className="px-3 py-2.5 text-slate-500">T{s.tier}</td>
                       <td className="px-3 py-2.5">
-                        <span className="text-slate-200">{s.open_cve_count}</span>
+                        <span className="text-slate-700">{s.open_cve_count}</span>
                         {s.breach_indicator && (
                           <span className="ml-1.5 tag bg-risk-critical/15 text-risk-critical">KEV</span>
                         )}
@@ -152,8 +158,9 @@ export default function Dashboard() {
                   <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
                   <Tooltip
-                    contentStyle={{ background: "#121a28", border: "1px solid #1e2a3d", borderRadius: 8 }}
-                    labelStyle={{ color: "#e2e8f0" }}
+                    cursor={{ fill: "rgba(79,70,229,0.06)" }}
+                    contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 4px 12px rgba(15,23,42,0.08)" }}
+                    labelStyle={{ color: "#0f172a" }}
                   />
                   <Bar dataKey="score" radius={[4, 4, 0, 0]}>
                     {chartData.map((d, i) => (
@@ -179,8 +186,8 @@ export default function Dashboard() {
                       {new Date(t.timestamp).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="mt-1.5 text-sm font-medium text-slate-200">{t.supplier_name}</div>
-                  <p className="text-xs text-slate-400">{t.description}</p>
+                  <div className="mt-1.5 text-sm font-medium text-slate-700">{t.supplier_name}</div>
+                  <p className="text-xs text-slate-500">{t.description}</p>
                 </div>
               ))}
             </div>
@@ -215,19 +222,57 @@ export default function Dashboard() {
                   {Number(c.cvss).toFixed(1)}
                 </span>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs text-accent">{c.id}</span>
+                    {c.cvss_severity && (
+                      <span
+                        className="tag"
+                        style={{
+                          background: `${BAND_HEX[c.cvss_severity.band]}22`,
+                          color: BAND_HEX[c.cvss_severity.band],
+                        }}
+                        title={`CVSS v3.1 base score ${Number(c.cvss).toFixed(1)} (${c.cvss_severity.range})`}
+                      >
+                        CVSS {c.cvss_severity.label}
+                      </span>
+                    )}
                     {c.known_exploited && (
-                      <span className="tag bg-risk-critical/15 text-risk-critical">Exploited</span>
+                      <span className="tag bg-risk-critical/15 text-risk-critical" title="Listed in the CISA Known Exploited Vulnerabilities catalog">
+                        CISA KEV
+                      </span>
                     )}
                     <span className="text-[11px] text-slate-500">{c.vendor}</span>
                   </div>
-                  <p className="line-clamp-2 text-xs text-slate-400">{c.description}</p>
+                  <p className="line-clamp-2 text-xs text-slate-500">{c.description}</p>
                 </div>
               </a>
             ))}
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <SectionTitle
+          title="Standards & Frameworks Alignment"
+          subtitle="Risk methodology, scoring and recommendations are traceable to recognized standards"
+        />
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {standards.map((s) => (
+            <a
+              key={s.id}
+              href={s.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-line bg-bg-soft p-3 hover:border-accent/40"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-slate-900">{s.name}</span>
+                <span className="tag bg-accent/15 text-accent">{s.category}</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">{s.summary}</p>
+            </a>
+          ))}
+        </div>
       </div>
     </div>
   );

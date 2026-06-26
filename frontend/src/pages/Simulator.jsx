@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { SectionTitle } from "../components/widgets.jsx";
 
+const BAND_HEX = { critical: "#e0301e", medium: "#ffb600", low: "#22c55e" };
+const RATING_BAND = { Critical: "critical", High: "critical", Medium: "medium", Low: "low" };
+
 const SCENARIOS = [
   { id: "ransomware", label: "Ransomware" },
   { id: "credential_dump", label: "Credential breach" },
@@ -17,6 +20,8 @@ export default function Simulator() {
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [standardsCatalog, setStandardsCatalog] = useState([]);
+  const [selectedStds, setSelectedStds] = useState([]);
   const endRef = useRef(null);
 
   useEffect(() => {
@@ -28,6 +33,19 @@ export default function Simulator() {
         setSupplierId(fromUrl || d.suppliers?.[0]?.supplier_id || "");
       });
   }, [params]);
+
+  useEffect(() => {
+    fetch("/api/standards")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d.standards ?? [];
+        setStandardsCatalog(list);
+        setSelectedStds(list.map((s) => s.id));
+      });
+  }, []);
+
+  const toggleStd = (id) =>
+    setSelectedStds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -44,7 +62,7 @@ export default function Simulator() {
       const res = await fetch("/api/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplier_id: supplierId, scenario, query: q }),
+        body: JSON.stringify({ supplier_id: supplierId, scenario, query: q, standards: selectedStds }),
       });
       const data = await res.json();
       if (data.error) {
@@ -59,10 +77,12 @@ export default function Simulator() {
     }
   };
 
+  const selected = suppliers.find((s) => s.supplier_id === supplierId);
+
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-white">Impact Simulator</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Impact Simulator</h1>
         <p className="text-sm text-slate-500">
           Ask what happens when a supplier is compromised. Blast radius, downtime and revenue impact
           are computed from the live dependency graph.
@@ -97,11 +117,100 @@ export default function Simulator() {
         </button>
       </div>
 
+      {standardsCatalog.length > 0 && (
+        <div className="rounded-lg border border-line bg-bg-card p-3 shadow-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              Simulate against standards
+            </span>
+            <div className="flex gap-2 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setSelectedStds(standardsCatalog.map((s) => s.id))}
+                className="text-accent hover:underline"
+              >
+                Select all
+              </button>
+              <span className="text-slate-300">·</span>
+              <button
+                type="button"
+                onClick={() => setSelectedStds([])}
+                className="text-slate-500 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {standardsCatalog.map((s) => {
+              const on = selectedStds.includes(s.id);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => toggleStd(s.id)}
+                  title={s.summary}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    on
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-line bg-bg-elevated text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {on ? "✓ " : ""}
+                  {s.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {selected && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-bg-soft px-3 py-2 text-xs">
+          <span className="text-slate-500">Standards posture:</span>
+          {selected.cvss_severity && (
+            <span
+              className="tag"
+              style={{
+                background: `${BAND_HEX[selected.cvss_severity.band]}22`,
+                color: BAND_HEX[selected.cvss_severity.band],
+              }}
+              title={`Highest CVSS v3.1 base score: ${Number(selected.max_cvss).toFixed(1)}`}
+            >
+              CVSS v3.1 {selected.cvss_severity.label}
+            </span>
+          )}
+          {selected.breach_indicator && (
+            <span className="tag bg-risk-critical/15 text-risk-critical" title="Listed in the CISA Known Exploited Vulnerabilities catalog">
+              CISA KEV
+            </span>
+          )}
+          {selected.iso27005 && (
+            <span
+              className="tag"
+              style={{
+                background: `${BAND_HEX[RATING_BAND[selected.iso27005.risk_rating] ?? "low"]}22`,
+                color: BAND_HEX[RATING_BAND[selected.iso27005.risk_rating] ?? "low"],
+              }}
+              title={`${selected.iso27005.methodology} — Likelihood: ${selected.iso27005.likelihood.level}, Consequence: ${selected.iso27005.consequence.level}`}
+            >
+              ISO 27005: {selected.iso27005.risk_rating}
+            </span>
+          )}
+          {selected.iso27005 && (
+            <span className="text-slate-500">
+              Likelihood <span className="text-slate-600">{selected.iso27005.likelihood.level}</span> × Consequence{" "}
+              <span className="text-slate-600">{selected.iso27005.consequence.level}</span>
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="card min-h-[420px]">
         {turns.length === 0 && (
           <div className="grid h-full place-items-center py-16 text-center">
             <div>
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-500">
                 Pick a supplier and scenario, or ask a question below.
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
@@ -123,7 +232,7 @@ export default function Simulator() {
           {turns.map((t, i) =>
             t.role === "user" ? (
               <div key={i} className="flex justify-end">
-                <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-accent/15 px-4 py-2 text-sm text-slate-100">
+                <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-accent/15 px-4 py-2 text-sm text-slate-900">
                   {t.text}
                 </div>
               </div>
@@ -131,7 +240,7 @@ export default function Simulator() {
               <div key={i} className="flex justify-start">
                 <div className="w-full max-w-[92%]">
                   {t.text ? (
-                    <div className="rounded-2xl rounded-bl-sm bg-bg-soft px-4 py-2 text-sm text-slate-200">
+                    <div className="rounded-2xl rounded-bl-sm bg-bg-soft px-4 py-2 text-sm text-slate-700">
                       {t.text}
                     </div>
                   ) : (
@@ -177,7 +286,7 @@ function ImpactResult({ impact, aiEnabled }) {
               ? "bg-risk-low/15 text-risk-low"
               : impact.confidence === "medium"
               ? "bg-risk-medium/15 text-risk-medium"
-              : "bg-slate-700/40 text-slate-400"
+              : "bg-slate-200 text-slate-500"
           }`}
         >
           {impact.confidence} confidence
@@ -193,15 +302,17 @@ function ImpactResult({ impact, aiEnabled }) {
 
       {impact.ai_summary && (
         <div className="rounded-lg border border-accent/20 bg-accent/5 p-3">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-accent">Claude AI analysis</div>
-          <p className="text-sm text-slate-200">{impact.ai_summary}</p>
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-accent">AI analysis</div>
+          <p className="text-sm text-slate-700">{impact.ai_summary}</p>
         </div>
       )}
+
+      <StandardsAnalysis items={impact.standards_analysis} />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>
           <div className="mb-1 text-xs uppercase tracking-wider text-slate-500">Critical products</div>
-          <ul className="space-y-1 text-sm text-slate-300">
+          <ul className="space-y-1 text-sm text-slate-600">
             {impact.critical_products.map((p) => (
               <li key={p} className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-risk-critical" />
@@ -212,7 +323,7 @@ function ImpactResult({ impact, aiEnabled }) {
         </div>
         <div>
           <div className="mb-1 text-xs uppercase tracking-wider text-slate-500">Affected plants</div>
-          <ul className="space-y-1 text-sm text-slate-300">
+          <ul className="space-y-1 text-sm text-slate-600">
             {impact.affected_plant_names.map((p) => (
               <li key={p} className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-risk-medium" />
@@ -254,11 +365,86 @@ function ImpactResult({ impact, aiEnabled }) {
   );
 }
 
+const STATUS_HEX = { gap: "#dc2626", partial: "#d97706", met: "#16a34a" };
+
+function StandardsAnalysis({ items }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">
+        Standards-based analysis
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        {items.map((b) => (
+          <div key={b.id} className="rounded-lg border border-line bg-bg-card p-3">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-sm font-semibold text-slate-900">{b.name}</span>
+              {b.headline && (
+                <span
+                  className="tag whitespace-nowrap"
+                  style={
+                    b.band
+                      ? { background: `${BAND_HEX[b.band]}22`, color: BAND_HEX[b.band] }
+                      : { background: "#eef1f6", color: "#475569" }
+                  }
+                >
+                  {b.headline}
+                </span>
+              )}
+            </div>
+
+            {b.metrics?.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                {b.metrics.map((m, i) => (
+                  <span key={i} className="text-xs">
+                    <span className="text-slate-500">{m.label}: </span>
+                    <span className="font-semibold text-slate-800">{m.value}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {b.list?.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {b.list.map((id) => (
+                  <span key={id} className="tag bg-bg-elevated font-mono text-[10px] text-accent">
+                    {id}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {b.controls?.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {b.controls.map((c, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs">
+                    <span
+                      className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                      style={{ background: STATUS_HEX[c.status] }}
+                      title={c.status}
+                    />
+                    <span>
+                      <span className="font-mono text-accent">{c.control}</span>{" "}
+                      <span className="text-slate-600">{c.title}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {b.note && <p className="mt-2 text-xs text-slate-500">{b.note}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Cell({ label, value, accent }) {
   return (
     <div className="rounded-lg border border-line bg-bg-card p-3">
       <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`mt-1 text-xl font-semibold ${accent ? "text-risk-critical" : "text-white"}`}>
+      <div className={`mt-1 text-xl font-semibold ${accent ? "text-risk-critical" : "text-slate-900"}`}>
         {value}
       </div>
     </div>

@@ -1,5 +1,20 @@
 import { getDb } from "./db.js";
 import { loadGraph, reachableByType } from "./graph.js";
+import { cvssV31Severity, iso27005Assessment } from "./standards.js";
+
+function withStandards(profile) {
+  return {
+    ...profile,
+    cvss_severity: cvssV31Severity(profile.max_cvss),
+    iso27005: iso27005Assessment({
+      breach_indicator: profile.breach_indicator,
+      max_cvss: profile.max_cvss,
+      patch_lag_days: profile.patch_lag_days,
+      connected_plant_count: profile.connected_plant_count,
+      risk_score: profile.risk_score,
+    }),
+  };
+}
 
 // Risk Score = (0.40 x maxCVSS-band) + (0.30 x breach) + (0.20 x patchLag) + (0.10 x connectivity)
 // Each factor is normalized to the band ranges from the design doc so the
@@ -107,22 +122,24 @@ export async function recomputeAllRiskScores() {
       delta,
     ]);
 
-    profiles.push({
-      supplier_id: i.id,
-      name: i.label,
-      tier: i.tier,
-      country: i.country,
-      risk_score: score,
-      risk_delta: delta,
-      band: bandFor(score),
-      max_cvss: i.max_cvss,
-      breach_indicator: i.breach_indicator,
-      patch_lag_days: i.patch_lag_days,
-      connected_plant_count: i.connected_plant_count,
-      open_cve_count: i.open_cves.length,
-      open_cves: i.open_cves,
-      summary: buildSummary(i, score, delta),
-    });
+    profiles.push(
+      withStandards({
+        supplier_id: i.id,
+        name: i.label,
+        tier: i.tier,
+        country: i.country,
+        risk_score: score,
+        risk_delta: delta,
+        band: bandFor(score),
+        max_cvss: i.max_cvss,
+        breach_indicator: i.breach_indicator,
+        patch_lag_days: i.patch_lag_days,
+        connected_plant_count: i.connected_plant_count,
+        open_cve_count: i.open_cves.length,
+        open_cves: i.open_cves,
+        summary: buildSummary(i, score, delta),
+      })
+    );
   }
 
   profiles.sort((a, b) => b.risk_score - a.risk_score);
@@ -146,7 +163,7 @@ export async function getRiskProfiles() {
     const p = s.props;
     const score = Number(p.risk_score ?? p.base_risk ?? 0);
     const openCves = p.open_cves ?? [];
-    return {
+    return withStandards({
       supplier_id: s.id,
       name: s.label,
       tier: Number(p.tier ?? 0),
@@ -163,7 +180,7 @@ export async function getRiskProfiles() {
       summary:
         p.risk_summary ??
         `${s.label} — risk ${score}/100 (${bandFor(score)}), ${openCves.length} open CVE(s).`,
-    };
+    });
   });
   profiles.sort((a, b) => b.risk_score - a.risk_score);
   return profiles;

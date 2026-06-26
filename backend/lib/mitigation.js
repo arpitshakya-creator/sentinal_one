@@ -1,4 +1,6 @@
 import { loadGraph } from "./graph.js";
+import { controlsForCategory, supplierComplianceFindings } from "./standards.js";
+import { bandFor } from "./risk.js";
 
 // Region adjacency used for the geographic-proximity factor of the
 // alternate-supplier similarity score.
@@ -125,10 +127,10 @@ function buildActions(supplier, impact, alternates) {
   ];
 
   return [
-    { category: "immediate", window: "0–6 hours", actions: immediate },
-    { category: "short_term", window: "6–48 hours", actions: shortTerm },
-    { category: "medium_term", window: "2–7 days", actions: mediumTerm },
-    { category: "long_term", window: "1–4 weeks", actions: longTerm },
+    { category: "immediate", window: "0–6 hours", actions: immediate, controls: controlsForCategory("immediate") },
+    { category: "short_term", window: "6–48 hours", actions: shortTerm, controls: controlsForCategory("short_term") },
+    { category: "medium_term", window: "2–7 days", actions: mediumTerm, controls: controlsForCategory("medium_term") },
+    { category: "long_term", window: "1–4 weeks", actions: longTerm, controls: controlsForCategory("long_term") },
   ];
 }
 
@@ -140,11 +142,23 @@ export async function buildMitigationPlan(supplierId, impact) {
   const alternates = findAlternateSuppliers(graph, supplierId, impact);
   const actions = buildActions(supplier, impact, alternates);
 
+  // Compliance posture (ISO/IEC 27002 + NIST SP 800-53 control gaps) for this supplier.
+  const p = supplier.props ?? {};
+  const score = Number(p.risk_score ?? p.base_risk ?? 0);
+  const profile = {
+    band: bandFor(score),
+    breach_indicator: Boolean(p.breach_indicator ?? false),
+    max_cvss: Number(p.max_cvss ?? 0),
+  };
+  const compliance = supplierComplianceFindings(profile, p);
+
   return {
     supplier_id: supplierId,
     supplier_name: supplier.label,
     generated_at: new Date().toISOString(),
     actions,
     alternate_suppliers: alternates,
+    compliance,
+    standards: ["ISO/IEC 27001:2022", "ISO/IEC 27002:2022", "ISO/IEC 27005:2022", "CVSS v3.1", "CISA KEV", "NIST SP 800-53 Rev.5"],
   };
 }
