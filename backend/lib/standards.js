@@ -352,3 +352,174 @@ export function simulationStandardsAnalysis(selectedIds, ctx) {
 }
 
 const RATING_BAND = { Critical: "critical", High: "critical", Medium: "medium", Low: "low" };
+
+// --- Control-by-control compliance checklist --------------------------------
+// Evaluates a breach against EVERY parameter of each selected standard and
+// returns pass / fail / partial / na per control, with rationale + remediation.
+export function complianceChecklist(selectedIds, ctx) {
+  const { profile = {}, props = {}, impact = {}, cves = [] } = ctx;
+  const ids = new Set(selectedIds && selectedIds.length ? selectedIds : STANDARDS.map((s) => s.id));
+  const meta = Object.fromEntries(STANDARDS.map((s) => [s.id, s]));
+
+  const breach = !!profile.breach_indicator;
+  const maxCvss = Number(profile.max_cvss) || 0;
+  const patchLag = Number(profile.patch_lag_days) || 0;
+  const criticalCount = cves.filter((c) => Number(c.cvss) >= 9).length;
+  const highCount = cves.filter((c) => Number(c.cvss) >= 7 && Number(c.cvss) < 9).length;
+  const kevList = cves.filter((c) => c.known_exploited).map((c) => c.id);
+  const rating = profile.iso27005?.risk_rating ?? iso27005Rating(profile.risk_score ?? 0);
+  const likelihood =
+    profile.iso27005?.likelihood?.level ??
+    iso27005Likelihood({ breach_indicator: breach, max_cvss: maxCvss, patch_lag_days: patchLag }).level;
+  const consequence =
+    profile.iso27005?.consequence?.level ?? iso27005Consequence(profile.connected_plant_count).level;
+  const band = profile.band ?? "low";
+  const lastAudit = props.last_audit_date ? new Date(props.last_audit_date) : null;
+  const auditAge = lastAudit ? Math.floor((Date.now() - lastAudit.getTime()) / 86_400_000) : null;
+  const erp = !!props.erp_connected;
+  const redundant = props.is_redundant === true;
+  const soleSource = props.is_redundant === false;
+  const scenario = impact.scenario || "breach";
+  const { summary: gapSummary } = supplierComplianceFindings(profile, props);
+  const totalGaps = gapSummary.gap;
+
+  const mk = (ref, title, status, rationale, remediation) => ({
+    ref,
+    title,
+    status,
+    rationale,
+    remediation: status === "pass" || status === "na" ? undefined : remediation,
+  });
+  const groupFor = (id, headline, checks) => {
+    const summary = { pass: 0, fail: 0, partial: 0, na: 0 };
+    for (const c of checks) summary[c.status] += 1;
+    const gband = summary.fail > 0 ? "critical" : summary.partial > 0 ? "medium" : "low";
+    return { id, name: meta[id].name, headline, band: gband, summary, checks };
+  };
+
+  const groups = [];
+
+  if (ids.has("cvss31")) {
+    groups.push(
+      groupFor("cvss31", `Max ${maxCvss.toFixed(1)} — ${cvssV31Severity(maxCvss).label}`, [
+        mk("Critical (≥9.0)", "No Critical-severity CVEs in scope", criticalCount === 0 ? "pass" : "fail",
+          `${criticalCount} Critical CVE(s) matched to this supplier.`,
+          "Patch or apply compensating controls for all Critical CVEs."),
+        mk("High (7.0–8.9)", "No High-severity CVEs in scope", highCount === 0 ? "pass" : "fail",
+          `${highCount} High CVE(s) matched.`,
+          "Remediate High-severity vulnerabilities as a priority."),
+        mk("Max base score", "Highest base score below High (< 7.0)", maxCvss < 7 ? "pass" : "fail",
+          `Highest base score is ${maxCvss.toFixed(1)}.`,
+          "Reduce maximum CVSS exposure below 7.0 through patching."),
+      ])
+    );
+  }
+
+  if (ids.has("cisakev")) {
+    groups.push(
+      groupFor("cisakev", kevList.length ? `${kevList.length} actively exploited` : "No active exploitation", [
+        mk("Exploitation status", "No actively exploited (KEV) CVEs", breach ? "fail" : "pass",
+          breach ? `Actively exploited: ${kevList.join(", ")}.` : "No CISA KEV match for this supplier.",
+          "Treat KEV items as emergencies: patch within CISA timelines or isolate."),
+        mk("Remediation timeliness", "KEV remediation within required window", !breach ? "na" : patchLag < 14 ? "pass" : "fail",
+          !breach ? "No KEV items requiring remediation." : `Patch lag is ${patchLag} day(s).`,
+          "Remediate KEV vulnerabilities within 14 days (or per BOD 22-01)."),
+      ])
+    );
+  }
+
+  if (ids.has("iso27005")) {
+    const likeStatus = ["Very Low", "Low"].includes(likelihood) ? "pass" : likelihood === "Medium" ? "partial" : "fail";
+    const consStatus = ["Minor", "Moderate"].includes(consequence) ? "pass" : consequence === "Major" ? "partial" : "fail";
+    const rateStatus = rating === "Low" ? "pass" : rating === "Medium" ? "partial" : "fail";
+    groups.push(
+      groupFor("iso27005", `Risk rating: ${rating}`, [
+        mk("Likelihood", "Likelihood within appetite (≤ Low)", likeStatus,
+          `Assessed likelihood: ${likelihood}.`,
+          "Reduce exposure (patch/KEV remediation) to lower likelihood."),
+        mk("Consequence", "Consequence within appetite (≤ Moderate)", consStatus,
+          `Assessed consequence: ${consequence} (${profile.connected_plant_count ?? impact.affected_plants ?? 0} plant(s)).`,
+          "Add redundancy/segmentation to reduce blast radius."),
+        mk("Risk evaluation", "Residual risk within appetite (≤ Medium)", rateStatus,
+          `Overall ISO 27005 rating: ${rating} for the ${scenario}.`,
+          "Apply risk treatment to bring residual risk within appetite."),
+      ])
+    );
+  }
+
+  if (ids.has("iso27001")) {
+    const treatStatus = ["Low", "Medium"].includes(rating) ? "pass" : rating === "High" ? "partial" : "fail";
+    const gapStatus = totalGaps === 0 ? "pass" : totalGaps <= 2 ? "partial" : "fail";
+    groups.push(
+      groupFor("iso27001", `Treatment: ${rating === "Critical" || rating === "High" ? "Modify" : rating === "Medium" ? "Modify/Share" : "Retain"}`, [
+        mk("Clause 6.1.2", "Information security risk assessment performed", "pass",
+          "A live risk profile is computed for this supplier."),
+        mk("Clause 6.1.3", "Risk treatment adequate for residual risk", treatStatus,
+          `Residual risk rating is ${rating}.`,
+          "Define and execute a treatment plan; escalate to the risk owner."),
+        mk("Annex A posture", "Annex A control gaps resolved", gapStatus,
+          `${totalGaps} open control gap(s) across ISO 27002 / NIST 800-53.`,
+          "Close outstanding control gaps to satisfy the ISMS."),
+      ])
+    );
+  }
+
+  if (ids.has("iso27002")) {
+    groups.push(
+      groupFor("iso27002", "Annex A controls", [
+        mk("A.5.7", "Threat intelligence", "pass", "Live NVD + CISA KEV intelligence is monitored."),
+        mk("A.5.20", "Information security in supplier agreements", band === "critical" ? "fail" : band === "medium" ? "partial" : "pass",
+          `Supplier risk band is ${band}.`,
+          "Enforce cyber clauses, breach-notification SLAs and audit rights."),
+        mk("A.5.21", "ICT supply chain security", erp ? "partial" : "na",
+          erp ? "Active ERP integration must be governed and monitored." : "No ICT integration on record.",
+          "Govern and continuously monitor the ICT supply-chain integration."),
+        mk("A.5.22", "Monitoring & review of supplier services", auditAge !== null && auditAge <= 365 ? "pass" : "fail",
+          auditAge === null ? "No assessment on record." : `Last assessment ${auditAge} day(s) ago.`,
+          "Reassess the supplier at least every 12 months."),
+        mk("A.5.30", "ICT readiness for business continuity", redundant ? "pass" : "fail",
+          redundant ? "Redundant/alternate sourcing available." : "Sole-source supplier — continuity at risk.",
+          "Qualify an alternate supplier and build continuity provisions."),
+        mk("A.8.8", "Management of technical vulnerabilities", breach ? "fail" : maxCvss >= 7 ? "partial" : "pass",
+          breach ? "Unremediated KEV vulnerability present." : maxCvss >= 7 ? `Open high/critical CVE (max ${maxCvss.toFixed(1)}).` : "No high/critical exposure.",
+          "Establish a vulnerability remediation SLA and patch backlog."),
+        mk("A.8.16", "Monitoring activities", "pass", "Continuous monitoring via the platform."),
+      ])
+    );
+  }
+
+  if (ids.has("nist80053")) {
+    groups.push(
+      groupFor("nist80053", "SP 800-53 controls", [
+        mk("RA-3", "Risk assessment", "pass", "Risk profile maintained for this supplier."),
+        mk("RA-5", "Vulnerability monitoring & scanning", breach ? "fail" : maxCvss >= 7 ? "partial" : "pass",
+          breach ? "Known exploited vulnerability outstanding." : maxCvss >= 7 ? "High-severity vulnerabilities pending." : "No high/critical exposure.",
+          "Continuously scan and remediate within defined SLAs."),
+        mk("SI-5", "Security alerts & advisories", "pass", "Threat feed ingests NVD/CISA advisories."),
+        mk("CA-7", "Continuous monitoring", "pass", "Posture is monitored continuously."),
+        mk("SR-3", "Supply chain controls & processes", soleSource && band === "critical" ? "fail" : redundant ? "pass" : "partial",
+          redundant ? "Alternate sourcing exists." : "Single-source dependency.",
+          "Define supply-chain controls and qualify alternates."),
+        mk("SR-6", "Supplier assessments & reviews", auditAge !== null && auditAge <= 365 ? "pass" : "fail",
+          auditAge === null ? "No assessment on record." : `Assessed ${auditAge} day(s) ago.`,
+          "Conduct supplier security assessments at least annually."),
+        mk("SR-8", "Notification agreements", "partial", "Breach-notification SLA not verified in contract.",
+          "Add breach-notification and incident-reporting clauses to the agreement."),
+        mk("IR-4", "Incident handling readiness", !breach && redundant ? "pass" : "partial",
+          `Readiness for a ${scenario}: ${redundant ? "redundancy available" : "limited fallback"}${breach ? ", active exploitation in play" : ""}.`,
+          "Pre-stage IR runbooks and containment playbooks for this supplier."),
+        mk("CP-2", "Contingency plan", redundant ? "pass" : "fail",
+          redundant ? "Alternate sourcing supports contingency." : "No qualified alternate for contingency.",
+          "Develop a contingency plan with a qualified alternate supplier."),
+        mk("SC-7", "Boundary protection", erp ? "partial" : "pass",
+          erp ? "ERP connectivity requires segmentation/zero-trust enforcement." : "No external integration to segment.",
+          "Segment the integration and enforce boundary controls."),
+      ])
+    );
+  }
+
+  const totals = { pass: 0, fail: 0, partial: 0, na: 0 };
+  for (const g of groups) for (const k of Object.keys(totals)) totals[k] += g.summary[k];
+  totals.total = totals.pass + totals.fail + totals.partial + totals.na;
+  return { groups, totals };
+}

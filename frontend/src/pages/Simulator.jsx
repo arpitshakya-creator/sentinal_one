@@ -307,7 +307,7 @@ function ImpactResult({ impact, aiEnabled }) {
         </div>
       )}
 
-      <StandardsAnalysis items={impact.standards_analysis} />
+      <ComplianceChecklist data={impact.compliance_checklist} />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>

@@ -15,6 +15,7 @@ import {
   cvssV31Severity,
   supplierComplianceFindings,
   simulationStandardsAnalysis,
+  complianceChecklist,
 } from "./lib/standards.js";
 
 const app = express();
@@ -85,12 +86,9 @@ app.post("/api/simulate", wrap(async (req, res) => {
        WHERE nc.node_id = $1 ORDER BY c.cvss DESC`,
       [supplierId]
     );
-    impact.standards_analysis = simulationStandardsAnalysis(selectedStandards, {
-      profile,
-      props,
-      impact,
-      cves: cveRows.rows,
-    });
+    const stdCtx = { profile, props, impact, cves: cveRows.rows };
+    impact.standards_analysis = simulationStandardsAnalysis(selectedStandards, stdCtx);
+    impact.compliance_checklist = complianceChecklist(selectedStandards, stdCtx);
     impact.standards_selected = selectedStandards;
 
     const summary = await aiImpactSummary(
