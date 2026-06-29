@@ -307,6 +307,8 @@ function ImpactResult({ impact, aiEnabled }) {
         </div>
       )}
 
+      <StandardsAnalysis items={impact.standards_analysis} />
+
       <ComplianceChecklist data={impact.compliance_checklist} />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -366,6 +368,63 @@ function ImpactResult({ impact, aiEnabled }) {
 }
 
 const STATUS_HEX = { gap: "#dc2626", partial: "#d97706", met: "#16a34a" };
+const CHECK_HEX = { pass: "#16a34a", fail: "#dc2626", partial: "#d97706", na: "#94a3b8" };
+
+function ComplianceChecklist({ data }) {
+  if (!data?.groups?.length) return null;
+  const t = data.totals ?? {};
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-xs uppercase tracking-wider text-slate-500">Compliance checklist</div>
+        <div className="flex gap-2 text-[11px] font-medium">
+          <span style={{ color: CHECK_HEX.pass }}>{t.pass ?? 0} pass</span>
+          <span style={{ color: CHECK_HEX.partial }}>{t.partial ?? 0} partial</span>
+          <span style={{ color: CHECK_HEX.fail }}>{t.fail ?? 0} fail</span>
+          {t.na ? <span style={{ color: CHECK_HEX.na }}>{t.na} n/a</span> : null}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        {data.groups.map((g) => (
+          <div key={g.id} className="rounded-lg border border-line bg-bg-card p-3">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-sm font-semibold text-slate-900">{g.name}</span>
+              {g.headline && (
+                <span
+                  className="tag whitespace-nowrap"
+                  style={
+                    g.band
+                      ? { background: `${BAND_HEX[g.band]}22`, color: BAND_HEX[g.band] }
+                      : { background: "#eef1f6", color: "#475569" }
+                  }
+                >
+                  {g.headline}
+                </span>
+              )}
+            </div>
+            <ul className="mt-2 space-y-1.5">
+              {(g.checks ?? []).map((c, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs">
+                  <span
+                    className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                    style={{ background: CHECK_HEX[c.status] ?? CHECK_HEX.na }}
+                    title={c.status}
+                  />
+                  <span>
+                    <span className="font-mono text-accent">{c.ref}</span>{" "}
+                    <span className="text-slate-700">{c.title}</span>
+                    {c.rationale && <span className="block text-slate-500">{c.rationale}</span>}
+                    {c.remediation && <span className="block text-slate-400">→ {c.remediation}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StandardsAnalysis({ items }) {
   if (!items?.length) return null;

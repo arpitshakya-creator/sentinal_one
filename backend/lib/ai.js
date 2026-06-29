@@ -71,14 +71,21 @@ function extractAnthropicText(content) {
   return block?.text ? block.text.trim() : null;
 }
 
+// Hard cap on how long we'll wait for the AI gateway before falling back to
+// the deterministic summary. Keeps the UI responsive when the model is slow.
+function timeoutMs() {
+  return Number(process.env.AI_TIMEOUT_MS || 25000);
+}
+
 async function ask(system, user) {
   const m = provider();
   const mdl = m === "bedrock" ? model().replace(/^bedrock\./, "") : model();
+  const t = timeoutMs();
   try {
     if (m === "openai") {
       const key = apiKey();
       if (!key) return null;
-      const client = new OpenAI({ apiKey: key, baseURL: baseURL() });
+      const client = new OpenAI({ apiKey: key, baseURL: baseURL(), timeout: t, maxRetries: 0 });
       const res = await client.chat.completions.create({
         model: mdl,
         max_tokens: 600,
@@ -93,7 +100,11 @@ async function ask(system, user) {
     const messages = [{ role: "user", content: user }];
     if (m === "bedrock") {
       if (!bedrockConfigured()) return null;
-      const client = new AnthropicBedrock({ awsRegion: process.env.AWS_REGION || "us-east-1" });
+      const client = new AnthropicBedrock({
+        awsRegion: process.env.AWS_REGION || "us-east-1",
+        timeout: t,
+        maxRetries: 0,
+      });
       const res = await client.messages.create({ model: mdl, max_tokens: 600, system, messages });
       return extractAnthropicText(res.content);
     }
@@ -101,7 +112,7 @@ async function ask(system, user) {
     // anthropic (direct or gateway via base URL)
     const key = apiKey();
     if (!key) return null;
-    const client = new Anthropic({ apiKey: key, baseURL: baseURL() });
+    const client = new Anthropic({ apiKey: key, baseURL: baseURL(), timeout: t, maxRetries: 0 });
     const res = await client.messages.create({ model: mdl, max_tokens: 600, system, messages });
     return extractAnthropicText(res.content);
   } catch (e) {

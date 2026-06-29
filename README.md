@@ -59,7 +59,7 @@ npm install
 npm run dev                  # start the dashboard on http://localhost:5173
 ```
 
-To point the dev proxy at a non-default backend, set `VITE_API_TARGET`
+To point the dev proxy cd a non-default backend, set `VITE_API_TARGET`
 (e.g. `VITE_API_TARGET=http://localhost:5000 npm run dev`).
 
 ## API
